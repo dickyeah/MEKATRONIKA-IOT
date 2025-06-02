@@ -9,7 +9,7 @@ const char* ssid = "1984";
 const char* password = "FIIHAKHAIR"; 
 
 // --- Google Sheets Webhook ---
-const char* scriptURL = "https://script.google.com/macros/s/AKfycbx1Hhtb2NzAW1CqB3Yw8B_eKOUGbd_5dZjscOTj9TzqTaI0pbE0rRrgSOMgZ8xOrFBCqA/exec"; // Ganti dengan URL Script kamu
+const char* scriptURL = "https://script.google.com/macros/s/AKfycbx1Hhtb2NzAW1CqB3Yw8B_eKOUGbd_5dZjscOTj9TzqTaI0pbE0rRrgSOMgZ8xOrFBCqA/exec"; 
 
 // --- Konfigurasi PIN ---
 #define MQ135_PIN A0
