@@ -1,0 +1,131 @@
+#include <ESP8266WiFi.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <ESP8266HTTPClient.h>
+#include <time.h>
+
+// --- Konfigurasi WiFi ---
+const char* ssid = "1984";         // Ganti dengan SSID WiFi kamu
+const char* password = "FIIHAKHAIR"; // Ganti dengan password WiFi kamu
+
+// --- Google Sheets Webhook ---
+const char* scriptURL = "https://script.google.com/macros/s/AKfycbx1Hhtb2NzAW1CqB3Yw8B_eKOUGbd_5dZjscOTj9TzqTaI0pbE0rRrgSOMgZ8xOrFBCqA/exec"; // Ganti dengan URL Script kamu
+
+// --- Konfigurasi PIN ---
+#define MQ135_PIN A0
+#define LED_MERAH_PIN 12   // D6
+#define LED_KUNING_PIN 13  // D7
+#define LED_HIJAU_PIN 15   // D8
+
+// --- LCD I2C ---
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// --- Interval dan waktu ---
+unsigned long lastReadTime = 0;
+const long readInterval = 5000;
+
+void setup() {
+  Serial.begin(115200);
+
+  // --- Inisialisasi LCD ---
+  Wire.begin(2, 0); // SDA = D4, SCL = D3
+  lcd.init();
+  lcd.backlight();
+
+  // --- Inisialisasi LED ---
+  pinMode(LED_MERAH_PIN, OUTPUT);
+  pinMode(LED_KUNING_PIN, OUTPUT);
+  pinMode(LED_HIJAU_PIN, OUTPUT);
+
+  // --- Koneksi WiFi ---
+  WiFi.begin(ssid, password);
+  Serial.print("Menghubungkan ke WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi terhubung!");
+
+  // --- Sinkronisasi waktu dari NTP ---
+  configTime(7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.println("Waktu tersinkronisasi.");
+}
+
+void loop() {
+  if (millis() - lastReadTime >= readInterval) {
+    lastReadTime = millis();
+
+    // --- Baca sensor ---
+    double ppm = analogRead(MQ135_PIN) * (5.0 / 1024.0) * 100;
+    String kualitas = getKategori(ppm);
+
+    // --- Tampilkan ke LCD ---
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Kualitas: " + kualitas);
+    lcd.setCursor(0, 1);
+    lcd.print("PPM: ");
+    lcd.print(ppm, 1);
+
+    // --- Tampilkan ke Serial ---
+    Serial.println("PPM: " + String(ppm, 1));
+    Serial.println("Kategori: " + kualitas);
+
+    // --- Kendalikan LED ---
+    kontrolLED(kualitas);
+
+    // --- Kirim ke Google Sheets ---
+    kirimKeGoogleSheets(ppm, kualitas);
+  }
+}
+
+String getKategori(double ppm) {
+  if (ppm > 200) return "BERBAHAYA";
+  else if (ppm > 100) return "KURANG BAIK";
+  else return "BAIK";
+}
+
+void kontrolLED(String kualitas) {
+  digitalWrite(LED_MERAH_PIN, LOW);
+  digitalWrite(LED_KUNING_PIN, LOW);
+  digitalWrite(LED_HIJAU_PIN, LOW);
+
+  if (kualitas == "BERBAHAYA") digitalWrite(LED_MERAH_PIN, HIGH);
+  else if (kualitas == "KURANG BAIK") digitalWrite(LED_KUNING_PIN, HIGH);
+  else if (kualitas == "BAIK") digitalWrite(LED_HIJAU_PIN, HIGH);
+}
+
+void kirimKeGoogleSheets(double ppm, String kualitas) {
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    WiFiClientSecure client;
+    client.setInsecure();  // Untuk HTTPS tanpa verifikasi sertifikat
+
+    // Ambil waktu saat ini
+    time_t now = time(nullptr);
+    struct tm* p_tm = localtime(&now);
+    char waktu[20];
+    strftime(waktu, sizeof(waktu), "%Y-%m-%d %H:%M:%S", p_tm);
+
+    // Format data JSON
+    String payload = "{\"time\":\"" + String(waktu) +
+                     "\",\"ppm\":\"" + String(ppm, 1) +
+                     "\",\"airQuality\":\"" + kualitas + "\"}";
+
+    if (http.begin(client, scriptURL)) {
+      http.addHeader("Content-Type", "application/json");
+      int httpCode = http.POST(payload);
+      if (httpCode > 0) {
+        String response = http.getString();
+        Serial.println("Google Sheets: " + response);
+      } else {
+        Serial.println("Gagal kirim: " + String(httpCode));
+      }
+      http.end();
+    } else {
+      Serial.println("Koneksi gagal.");
+    }
+  } else {
+    Serial.println("WiFi tidak terhubung.");
+  }
+}
