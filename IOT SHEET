@@ -1,0 +1,23 @@
+function doPost(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  
+  try {
+    // Parsing JSON yang dikirim dari ESP8266
+    var data = JSON.parse(e.postData.contents);
+    
+    // Ambil nilai dari JSON
+    var waktu = data.time || "";
+    var ppm = data.ppm || "";
+    var kualitas = data.airQuality || "";
+
+    // Tambahkan baris ke spreadsheet
+    sheet.appendRow([waktu, ppm, kualitas]);
+    
+    // Balasan sukses
+    return ContentService.createTextOutput("Data berhasil dikirim ke Spreadsheet.");
+    
+  } catch (error) {
+    // Balasan error jika parsing gagal
+    return ContentService.createTextOutput("Error: " + error.message);
+  }
+}
